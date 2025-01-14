@@ -155,3 +155,92 @@ o	exec-maven-plugin
 3.	mvn exec:java -Dexec.mainClass=org.example.Main
 4.	Упрощает управление зависимостями и позволяет легко добавлять новые библиотеки в проект.
 Этот файл — ключ к управлению сборкой, зависимостями и запуском проекта с помощью Maven.
+
+
+Описание класса Main для проекта
+Класс Main в этом проекте выполняет функцию точки входа и реализации работы с сервисом сокращения URL. Этот класс предоставляет функционал для генерации короткой ссылки на основе длинного URL, а также для перехода по сокращенной ссылке с использованием Desktop API для открытия браузера.
+
+Основные функции класса Main:
+Генерация уникального идентификатора пользователя (UUID):
+В начале работы программы создается уникальный идентификатор для каждого пользователя, что позволяет связать его с созданной ссылкой. Это помогает индивидуализировать работу с сокращенными URL для каждого пользователя.
+
+UUID userId = UUID.randomUUID();
+Ввод длинной ссылки для сокращения:
+Пользователь вводит длинную ссылку в консоль, и программа передает эту ссылку в сервис для генерации короткой версии. Этот шаг запрашивает от пользователя URL.
+
+System.out.print("Enter URL to shorten: ");
+String longUrl = scanner.nextLine();
+Генерация сокращенной ссылки:
+С помощью метода generateShortUrl из UrlShortenerService программа генерирует короткую ссылку. Эта ссылка содержит как идентификатор пользователя, так и зашифрованную оригинальную ссылку, что позволяет сгенерировать уникальную ссылку для каждого пользователя.
+
+String shortUrl = service.generateShortUrl(longUrl, userId);
+System.out.println("Shortened URL: " + shortUrl);
+Ввод сокращенной ссылки для перехода:
+После генерации короткой ссылки, пользователю предлагается ввести сокращенную ссылку, по которой он хочет перейти. Программа ожидает ввода сокращенной ссылки и затем производит переход по ней.
+
+System.out.print("Enter shortened URL to visit: ");
+String userShortUrl = scanner.nextLine();
+Добавление префикса в случае необходимости:
+Если пользователь введет сокращенную ссылку без префикса http://short.url/, программа автоматически добавляет его, чтобы привести URL к правильному формату для перехода.
+
+if (!userShortUrl.startsWith("http://short.url/")) {
+    userShortUrl = "http://short.url/" + userShortUrl;
+}
+Метод openInBrowser:
+Этот метод проверяет, поддерживает ли система работу с Desktop API. Если поддержка имеется, он открывает браузер с оригинальным URL. Программа разворачивает короткую ссылку в длинный URL, используя метод getOriginalUrl из UrlShortenerService, а затем открывает полученный URL в браузере.
+
+public static void openInBrowser(String shortUrl, UrlShortenerService service) {
+    try {
+        
+        String longUrl = service.getOriginalUrl(shortUrl);
+
+        
+        if (longUrl != null) {
+            
+            URI uri = new URI(longUrl);
+
+            
+            if (Desktop.isDesktopSupported()) {
+                Desktop desktop = Desktop.getDesktop();
+                desktop.browse(uri);  // Открытие браузера с заданной ссылкой
+            } else {
+                System.out.println("Desktop is not supported on this system.");
+            }
+        } else {
+            System.out.println("Error: Short URL not found.");
+        }
+    } catch (IOException | URISyntaxException e) {
+        System.out.println("Error opening URL in browser: " + e.getMessage());
+    }
+}
+
+
+Описание класса UrlShortenerService
+Класс UrlShortenerService предоставляет логику для работы с сервисом сокращения URL. Он включает в себя методы для генерации сокращенных ссылок, сохранения их в "базу данных" (в данном случае, использующую структуру данных Map) и восстановления оригинальных URL из сокращенных ссылок.
+
+Основные функции класса UrlShortenerService:
+Хранение данных: Внутри класса используется коллекция Map<String, String>, которая имитирует базу данных, где ключом является уникальная часть короткой ссылки, а значением — оригинальная длинная ссылка. Эта коллекция обеспечивает возможность быстрого поиска и восстановления оригинальных URL по сокращенным ссылкам.
+
+private Map<String, String> urlDatabase = new HashMap<>();
+Метод generateShortUrl: Этот метод отвечает за создание короткой ссылки. Он принимает длинную ссылку и UUID пользователя, генерирует уникальный идентификатор для этой ссылки, кодирует длинный URL в строку Base64 и формирует короткую ссылку. Полученная короткая ссылка сохраняется в "базе данных" для последующего использования.
+
+Процесс генерации URL:
+В начале метода создается уникальная строка для каждого пользователя, которая включает UUID и кодированную длинную ссылку. Эта строка добавляется к базовому URL http://short.url/, что создает уникальную сокращенную ссылку.
+public String generateShortUrl(String longUrl, UUID userId) {
+    String shortUrlPart = userId.toString() + "/" + encodeBase64(longUrl);
+    String shortUrl = "http://short.url/" + shortUrlPart;
+
+    urlDatabase.put(shortUrlPart, longUrl);
+    return shortUrl;
+}
+Метод encodeBase64:
+Для кодирования длинной ссылки используется стандартный метод Base64.getUrlEncoder(). Это позволяет получить безопасную для URL строку, которая может быть использована в короткой ссылке.
+private String encodeBase64(String longUrl) {
+    return Base64.getUrlEncoder().encodeToString(longUrl.getBytes());
+}
+Метод getOriginalUrl: Этот метод используется для извлечения оригинальной длинной ссылки, если пользователю нужно вернуться к ней. Он принимает сокращенную ссылку, извлекает уникальную часть (без префикса http://short.url/) и ищет соответствующий оригинальный URL в базе данных.
+
+public String getOriginalUrl(String shortUrl) {
+    String shortUrlPart = shortUrl.replace("http://short.url/", "");
+    return urlDatabase.get(shortUrlPart);
+}
